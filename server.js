@@ -297,7 +297,7 @@ app.get('/api/shorturls/:shortcode', async (req, res) => {
 });
 
 // Redirect route with enhanced tracking
-app.get('/:shortcode', async (req, res, next) => {
+app.get('/r/:shortcode', async (req, res, next) => {
   try {
     const { shortcode } = req.params;
     const urlData = await Url.findOne({ shortcode });

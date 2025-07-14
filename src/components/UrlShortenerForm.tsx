@@ -83,7 +83,7 @@ const UrlShortenerForm: React.FC<Props> = ({ onUrlsCreated }) => {
       setUrlEntries([{ url: '', shortcode: '', validity: 30 }]);
       onUrlsCreated();
     } catch (error: any) {
-      // console.error('Error caught in UrlShortenerForm:', error);
+      // console.error('Error caught in UrlShort  enerForm:', error);
       setError(error.message || 'Failed to create short URLs');
     } finally {
       setLoading(false);
