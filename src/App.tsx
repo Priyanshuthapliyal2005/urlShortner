@@ -14,8 +14,11 @@ import { LinkIcon, BarChart3 } from 'lucide-react';
 import UrlShortenerForm from './components/UrlShortenerForm';
 import StatisticsTable from './components/StatisticsTable';
 import HealthStatus from './components/HealthStatus';
+import AuthButton from './components/AuthButton';
 import { UrlData } from './types';
 import { fetchUrls } from './api';
+import { useAuth, AuthProvider } from './hooks/useAuth.tsx';
+import AnimatedBackground from './components/AnimatedBackground';
 
 const theme = createTheme({
   palette: {
@@ -66,22 +69,29 @@ function TabPanel(props: TabPanelProps) {
   );
 }
 
-function App() {
+function AppContent() {
   const [tabValue, setTabValue] = useState(0);
   const [urls, setUrls] = useState<UrlData[]>([]);
   const [loading, setLoading] = useState(false);
+  const { user } = useAuth();
 
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
   };
 
   const loadUrls = async () => {
+    if (!user) {
+      setUrls([]);
+      return;
+    }
+    
     setLoading(true);
     try {
       const response = await fetchUrls();
       setUrls(response.urls);
     } catch (error) {
       console.error('Error loading URLs:', error);
+      setUrls([]);
     } finally {
       setLoading(false);
     }
@@ -89,20 +99,23 @@ function App() {
 
   useEffect(() => {
     loadUrls();
-  }, []);
+  }, [user]);
 
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
       <Container maxWidth="lg" sx={{ py: 4 }}>
         <Paper elevation={3} sx={{ borderRadius: 2, overflow: 'hidden' }}>
           <Box sx={{ bgcolor: 'primary.main', color: 'white', p: 3 }}>
-            <Typography variant="h4" component="h1" gutterBottom>
-              URL Shortener
-            </Typography>
-            <Typography variant="subtitle1">
-              Create short URLs with custom codes and track their performance
-            </Typography>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <Box>
+                <Typography variant="h4" component="h1" gutterBottom>
+                  URL Shortener
+                </Typography>
+                <Typography variant="subtitle1">
+                  Create short URLs with custom codes and track their performance
+                </Typography>
+              </Box>
+              <AuthButton />
+            </Box>
           </Box>
           
           <Tabs
@@ -132,6 +145,17 @@ function App() {
           </TabPanel>
         </Paper>
       </Container>
+  );
+}
+
+function App() {
+  return (
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <AnimatedBackground />
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
     </ThemeProvider>
   );
 }

@@ -1,11 +1,12 @@
 import axios from 'axios';
-import { CreateUrlRequest, CreateUrlResponse, UrlData } from './types';
+import { CreateUrlRequest, CreateUrlResponse, UrlData, User } from './types';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || import.meta.env.API_BASE_URL || 'http://localhost:3001';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 10000,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -97,6 +98,29 @@ export const checkHealth = async (): Promise<any> => {
   }
 };
 
+export const checkAuthStatus = async (): Promise<{ user: User | null }> => {
+  try {
+    const response = await api.get('/auth/me');
+    return response.data.data;
+  } catch (error: any) {
+    const errorMessage = error.response?.data?.error || 'Auth check failed';
+    const newError = new Error(errorMessage);
+    newError.name = 'APIError';
+    throw newError;
+  }
+};
+
+export const logout = async (): Promise<void> => {
+  try {
+    await api.post('/auth/logout');
+  } catch (error: any) {
+    const errorMessage = error.response?.data?.error || 'Logout failed';
+    const newError = new Error(errorMessage);
+    newError.name = 'APIError';
+    throw newError;
+  }
+};
+
 export const getShortUrl = (shortcode: string): string => {
-  return `${API_BASE_URL}/r/${shortcode}`;
+  return `${API_BASE_URL}/${shortcode}`;
 };

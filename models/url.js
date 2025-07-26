@@ -10,6 +10,11 @@ const urlSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null // Allow anonymous URLs
+  },
   createdAt: {
     type: Date,
     default: Date.now

@@ -17,6 +17,7 @@ import {
 import { Plus, Trash2, Copy, ExternalLink, Link } from 'lucide-react';
 import { createShortUrls, getShortUrl } from '../api';
 import { UrlData } from '../types';
+import { useAuth } from '../hooks/useAuth';
 
 interface UrlEntry {
   url: string;
@@ -29,6 +30,7 @@ interface Props {
 }
 
 const UrlShortenerForm: React.FC<Props> = ({ onUrlsCreated }) => {
+  const { user } = useAuth();
   const [urlEntries, setUrlEntries] = useState<UrlEntry[]>([
     { url: '', shortcode: '', validity: 30 }
   ]);
@@ -124,7 +126,8 @@ const UrlShortenerForm: React.FC<Props> = ({ onUrlsCreated }) => {
       </Box>
       
       <Typography variant="body2" color="text.secondary" sx={{ mb: 4 }}>
-        Enter up to 5 URLs to shorten simultaneously with optional custom shortcodes
+        Enter up to 5 URLs to shorten simultaneously with optional custom shortcodes.
+        {!user && ' Sign in to track statistics and manage your URLs.'}
       </Typography>
       
       <form onSubmit={handleSubmit}>

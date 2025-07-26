@@ -24,6 +24,7 @@ import {
 import { Copy, ExternalLink, RefreshCw, Trash2, BarChart3 } from 'lucide-react';
 import { UrlData } from '../types';
 import { getShortUrl, deleteUrl, fetchUrlStats } from '../api';
+import { useAuth } from '../hooks/useAuth';
 
 interface Props {
   urls: UrlData[];
@@ -32,6 +33,7 @@ interface Props {
 }
 
 const StatisticsTable: React.FC<Props> = ({ urls, loading, onRefresh }) => {
+  const { user } = useAuth();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [urlToDelete, setUrlToDelete] = useState<string>('');
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -128,6 +130,12 @@ const StatisticsTable: React.FC<Props> = ({ urls, loading, onRefresh }) => {
 
   return (
     <Box>
+      {!user && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          Sign in with Google to view and manage your URL statistics.
+        </Alert>
+      )}
+      
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>
           {error}
@@ -141,13 +149,22 @@ const StatisticsTable: React.FC<Props> = ({ urls, loading, onRefresh }) => {
         <Button
           startIcon={<RefreshCw size={20} />}
           onClick={onRefresh}
-          disabled={loading}
+          disabled={loading || !user}
         >
           Refresh
         </Button>
       </Box>
 
-      {loading ? (
+      {!user ? (
+        <Paper elevation={1} sx={{ p: 4, textAlign: 'center', backgroundColor: 'rgba(255, 255, 255, 0.05)' }}>
+          <Typography variant="h6" gutterBottom>
+            Authentication Required
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Please sign in to view your URL statistics and manage your shortened URLs.
+          </Typography>
+        </Paper>
+      ) : loading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
           <CircularProgress />
         </Box>

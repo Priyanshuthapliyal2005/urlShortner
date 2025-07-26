@@ -6,7 +6,14 @@ import helmet from 'helmet';
 import compression from 'compression';
 import mongoose from 'mongoose';
 import rateLimit from 'express-rate-limit';
+import session from 'express-session';
+import MongoStore from 'connect-mongo';
+import cookieParser from 'cookie-parser';
+import jwt from 'jsonwebtoken';
+import passport from './config/passport.js';
 import Url from './models/url.js';
+import User from './models/user.js';
+import { authenticateToken, requireAuth } from './middleware/auth.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -14,19 +21,30 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 const MONGODB_URI = process.env.MONGODB_URI;
 
 // Connect to MongoDB
-mongoose.connect(MONGODB_URI, {
-  serverSelectionTimeoutMS: 5000,
-  socketTimeoutMS: 45000,
-  family: 4
-}).then(() => {
-  console.log('Connected to MongoDB');
-}).catch(err => {
-  console.error('MongoDB connection error:', err);
-});
+if (MONGODB_URI && MONGODB_URI !== 'mongodb+srv://cluster0.mongodb.net/urlshortener') {
+  mongoose.connect(MONGODB_URI, {
+    serverSelectionTimeoutMS: 5000,
+    socketTimeoutMS: 45000,
+    family: 4
+  }).then(() => {
+    console.log('Connected to MongoDB');
+  }).catch(err => {
+    console.error('MongoDB connection error:', err);
+    console.log('Please set up a MongoDB Atlas connection string in your .env file');
+  });
+} else {
+  console.log('⚠️  MongoDB connection not configured');
+  console.log('Please set up MongoDB Atlas:');
+  console.log('1. Go to https://cloud.mongodb.com/');
+  console.log('2. Create a free cluster');
+  console.log('3. Get your connection string');
+  console.log('4. Update MONGODB_URI in your .env file');
+}
 
 // Security middleware
 app.use(helmet());
 app.use(compression());
+app.use(cookieParser());
 
 // Rate limiting
 const limiter = rateLimit({
@@ -39,15 +57,49 @@ app.use('/api/', limiter);
 
 // CORS configuration
 const corsOptions = {
-  origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  origin: [
+    'http://localhost:5173',
+    'http://localhost:3000',
+    'http://127.0.0.1:5173',
+    'http://127.0.0.1:3000',
+    'https://accounts.google.com',
+    'https://shorturl-five-rosy.vercel.app',
+    process.env.FRONTEND_URL
+  ],
   credentials: true,
-  optionsSuccessStatus: 200
+  optionsSuccessStatus: 200,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Cookie']
 };
 app.use(cors(corsOptions));
 
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Session configuration
+app.use(session({
+  secret: process.env.SESSION_SECRET,
+  resave: false,
+  saveUninitialized: false,
+  store: MongoStore.create({
+    mongoUrl: MONGODB_URI
+  }),
+  cookie: {
+    secure: NODE_ENV === 'production' && process.env.FRONTEND_URL?.startsWith('https'),
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    sameSite: NODE_ENV === 'production' ? 'none' : 'lax',
+    domain: NODE_ENV === 'production' ? undefined : undefined
+  }
+}));
+
+// Passport middleware
+app.use(passport.initialize());
+app.use(passport.session());
+
+// Apply authentication middleware to all routes
+app.use(authenticateToken);
 
 // Logging middleware
 const logFormat = process.env.LOG_FORMAT || (NODE_ENV === 'production' ? 'combined' : ':method :url :status :res[content-length] - :response-time ms :remote-addr :user-agent');
@@ -163,6 +215,81 @@ app.get('/health', (req, res) => {
 
 // API Routes
 
+// Authentication Routes
+app.get('/auth/google',
+  passport.authenticate('google', { scope: ['profile', 'email'] })
+);
+
+app.get('/auth/google/callback',
+  passport.authenticate('google', { failureRedirect: '/login' }),
+  (req, res) => {
+    // Generate JWT token
+    const token = jwt.sign(
+      { userId: req.user._id },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+    
+    // Set cookie
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: NODE_ENV === 'production' && process.env.FRONTEND_URL?.startsWith('https'),
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      sameSite: NODE_ENV === 'production' ? 'none' : 'lax'
+    });
+    
+    // Redirect to frontend
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    res.redirect(`${frontendUrl}?auth=success`);
+  }
+);
+
+app.post('/auth/logout', (req, res) => {
+  res.clearCookie('token', {
+    httpOnly: true,
+    secure: NODE_ENV === 'production' && process.env.FRONTEND_URL?.startsWith('https'),
+    sameSite: NODE_ENV === 'production' ? 'none' : 'lax'
+  });
+  req.logout((err) => {
+    if (err) {
+      return res.status(500).json({
+        success: false,
+        error: 'Logout failed',
+        statusCode: 500,
+        timestamp: new Date().toISOString()
+      });
+    }
+    res.json({
+      success: true,
+      message: 'Logged out successfully',
+      timestamp: new Date().toISOString()
+    });
+  });
+});
+
+app.get('/auth/me', (req, res) => {
+  if (!req.user) {
+    return res.json({
+      success: true,
+      data: { user: null },
+      timestamp: new Date().toISOString()
+    });
+  }
+  
+  res.json({
+    success: true,
+    data: {
+      user: {
+        id: req.user._id,
+        email: req.user.email,
+        name: req.user.name,
+        picture: req.user.picture
+      }
+    },
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Create short URLs
 app.post('/api/shorturls', async (req, res) => {
   try {
@@ -222,6 +349,7 @@ app.post('/api/shorturls', async (req, res) => {
       const urlDoc = await Url.create({
         shortcode: finalShortcode,
         originalUrl: url,
+        userId: req.user ? req.user._id : null,
         createdAt,
         expiresAt,
         clicks: []
@@ -240,10 +368,10 @@ app.post('/api/shorturls', async (req, res) => {
   }
 });
 
-// Get all URLs with stats
-app.get('/api/shorturls', async (req, res) => {
+// Get user's URLs with stats (requires authentication)
+app.get('/api/shorturls', requireAuth, async (req, res) => {
   try {
-    const urls = await Url.find().lean();
+    const urls = await Url.find({ userId: req.user._id }).lean();
     const urlsWithStats = urls.map(url => ({
       ...url,
       clickCount: url.clicks.length,
@@ -259,18 +387,21 @@ app.get('/api/shorturls', async (req, res) => {
     res.json(createSuccessResponse({ urls: urlsWithStats }, `Retrieved ${urlsWithStats.length} URL(s)`));
   } catch (error) {
     console.error('[GET ALL URLS ERROR]', error);
-    next(error);
+    res.status(500).json(createErrorResponse('Internal server error', 500));
   }
 });
 
-// Get specific URL stats
-app.get('/api/shorturls/:shortcode', async (req, res) => {
+// Get specific URL stats (requires authentication and ownership)
+app.get('/api/shorturls/:shortcode', requireAuth, async (req, res) => {
   try {
     const { shortcode } = req.params;
-    const urlData = await Url.findOne({ shortcode }).lean();
+    const urlData = await Url.findOne({ 
+      shortcode, 
+      userId: req.user._id 
+    }).lean();
     
     if (!urlData) {
-      return res.status(404).json(createErrorResponse('Short URL not found', 404));
+      return res.status(404).json(createErrorResponse('Short URL not found or access denied', 404));
     }
     
     const stats = {
@@ -297,36 +428,39 @@ app.get('/api/shorturls/:shortcode', async (req, res) => {
 });
 
 // Redirect route with enhanced tracking
-app.get('/r/:shortcode', async (req, res, next) => {
+// Catch all for /:shortcode with any number of leading slashes
+app.get(/^\/+([a-zA-Z0-9]+)$/, async (req, res, next) => {
   try {
-    const { shortcode } = req.params;
+    // Extract shortcode from regex match
+    let shortcode = req.params[0] || '';
+    shortcode = shortcode.replace(/^\/+/, '');
     const urlData = await Url.findOne({ shortcode });
     const clientInfo = getClientInfo(req);
-    
+
     console.log('[REDIRECT REQUEST]', { shortcode, ...clientInfo });
-    
+
     if (!urlData) {
       console.log('[REDIRECT ERROR] URL not found:', shortcode);
       return res.status(404).json(createErrorResponse('Short URL not found', 404));
     }
-    
+
     await urlData.checkExpiry();
-    
+
     if (urlData.isExpired) {
       console.log('[REDIRECT ERROR] URL expired:', shortcode);
       return res.status(410).json(createErrorResponse('Short URL has expired', 410));
     }
-    
+
     // Track click
     await urlData.addClick(clientInfo);
-    
-    console.log('[CLICK TRACKED]', { 
-      shortcode, 
-      originalUrl: urlData.originalUrl, 
+
+    console.log('[CLICK TRACKED]', {
+      shortcode,
+      originalUrl: urlData.originalUrl,
       totalClicks: urlData.clicks.length,
-      ...clientInfo 
+      ...clientInfo
     });
-    
+
     res.redirect(urlData.originalUrl);
   } catch (error) {
     console.error('[REDIRECT ERROR]', error);
@@ -334,14 +468,18 @@ app.get('/r/:shortcode', async (req, res, next) => {
   }
 });
 
-// Delete URL endpoint
-app.delete('/api/shorturls/:shortcode', async (req, res) => {
+// Delete URL endpoint (requires authentication and ownership)
+app.delete('/api/shorturls/:shortcode', requireAuth, async (req, res) => {
   try {
     const { shortcode } = req.params;
     
-    const result = await Url.deleteOne({ shortcode });
+    const result = await Url.deleteOne({ 
+      shortcode, 
+      userId: req.user._id 
+    });
+    
     if (result.deletedCount === 0) {
-      return res.status(404).json(createErrorResponse('Short URL not found', 404));
+      return res.status(404).json(createErrorResponse('Short URL not found or access denied', 404));
     }
     
     console.log('[URL DELETED]', { shortcode });
