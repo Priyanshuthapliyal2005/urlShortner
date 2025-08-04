@@ -129,6 +129,7 @@ const UrlShortenerForm: React.FC<Props> = ({ onUrlsCreated }) => {
         Enter up to 5 URLs to shorten simultaneously with optional custom shortcodes.
         {!user && ' Sign in to track statistics and manage your URLs.'}
       </Typography>
+      <meta name="description" content="Create multiple short URLs simultaneously with custom shortcodes and expiration settings. Free URL shortener with click tracking." />
       
       <form onSubmit={handleSubmit}>
         <Box sx={{ mb: 3 }}>

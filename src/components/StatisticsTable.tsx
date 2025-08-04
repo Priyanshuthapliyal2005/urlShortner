@@ -146,6 +146,7 @@ const StatisticsTable: React.FC<Props> = ({ urls, loading, onRefresh }) => {
         <Typography variant="h5">
           URL Statistics
         </Typography>
+        <meta name="description" content="View detailed analytics for your shortened URLs including click counts, creation dates, and expiration status." />
         <Button
           startIcon={<RefreshCw size={20} />}
           onClick={onRefresh}

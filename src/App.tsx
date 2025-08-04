@@ -19,6 +19,7 @@ import { UrlData } from './types';
 import { fetchUrls } from './api';
 import { useAuth, AuthProvider } from './hooks/useAuth.tsx';
 import AnimatedBackground from './components/AnimatedBackground';
+import SEOHead from './components/SEOHead';
 
 const theme = createTheme({
   palette: {
